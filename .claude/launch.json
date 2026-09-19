@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "book-tutor",
+      "runtimeExecutable": ".venv/bin/python",
+      "runtimeArgs": ["-m", "flask", "--app", "app", "run", "--port", "5003", "--debug"],
+      "port": 5003,
+      "cwd": "/Users/eddubnitsky/book_tutor"
+    },
+    {
+      "name": "book-tutor-frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "--port", "5175", "--strictPort"],
+      "port": 5175,
+      "cwd": "/Users/eddubnitsky/book_tutor/frontend"
+    }
+  ]
+}

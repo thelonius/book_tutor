@@ -1,0 +1,572 @@
+/* ── Astro-палитра ──
+ * --color-* токены ставит src/bootTheme.ts inline'ом в <head> до пэйнта,
+ * useAstroTheme их же ротейтит на конце planetary-часа. Mode (dark/light)
+ * следует prefers-color-scheme.
+ *
+ * Фолбэки в @theme/index.css на случай отключённого JS / SSR / robots —
+ * соответствуют Moon-day + Mercury-hour в dark mode.
+ */
+:root {
+  --color-bg: oklch(14% 0.012 245);
+  --color-surface: oklch(19% 0.018 245);
+  --color-text: oklch(92% 0.005 245);
+  --color-text-muted: oklch(68% 0.020 245);
+  --color-accent: oklch(75% 0.140 220);
+  --color-border: oklch(30% 0.018 245);
+  --color-success: oklch(78% 0.140 145);
+  --color-warn: oklch(80% 0.140 75);
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --color-bg: oklch(98% 0.005 245);
+    --color-surface: oklch(95% 0.012 245);
+    --color-text: oklch(22% 0.008 245);
+    --color-text-muted: oklch(45% 0.020 245);
+    --color-accent: oklch(42% 0.140 220);
+    --color-border: oklch(80% 0.020 245);
+    --color-success: oklch(50% 0.140 145);
+    --color-warn: oklch(55% 0.130 75);
+  }
+}
+
+/* ── Legacy CSS-переменные → производные от --color-* ──
+ * Один блок на оба режима — color-mix считает поверх текущих токенов,
+ * так что и light/dark, и planetary-смена accent'а автоматически
+ * прокатываются по всему UI. Accent выходит на user-bubble, на active
+ * mode-btn, на inline code — это места где hue реально работает.
+ */
+:root {
+  --bg:               var(--color-bg);
+  --bg-panel:         var(--color-surface);
+  --border:           var(--color-border);
+  --text:             var(--color-text);
+  --text-muted:       var(--color-text-muted);
+  --text-dim:         color-mix(in oklch, var(--color-text-muted), var(--color-border));
+  --text-dimmer:      var(--color-border);
+  --heading:          var(--color-text);
+  --bubble-ai:        var(--color-surface);
+  --bubble-ai-border: var(--color-border);
+  --bubble-user:      color-mix(in oklch, var(--color-accent) 14%, var(--color-surface));
+  --bubble-user-bdr:  color-mix(in oklch, var(--color-accent) 28%, var(--color-border));
+  --code-bg:          color-mix(in oklch, var(--color-bg) 88%, var(--color-text) 12%);
+  --code-border:      var(--color-border);
+  --code-color:       var(--color-accent);
+  --input-bg:         var(--color-surface);
+  --hover-bg:         color-mix(in oklch, var(--color-text) 7%, transparent);
+  --hover-bg-soft:    color-mix(in oklch, var(--color-text) 4%, transparent);
+  --avatar-user-bg:   color-mix(in oklch, var(--color-accent) 14%, var(--color-surface));
+  --scrollbar:        var(--color-border);
+  --send-disabled:    var(--color-border);
+  --dot-color:        var(--color-text-muted);
+  --em-color:         var(--color-text-muted);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  overflow: hidden;
+  transition: background 0.2s, color 0.2s;
+}
+
+/* React mount: root становится flex-контейнером уровня body. */
+#root {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+
+/* ── Sidebar ── */
+.sidebar {
+  width: 256px;
+  min-width: 256px;
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: width 0.25s ease, min-width 0.25s ease, border-color 0.25s ease;
+}
+.sidebar.collapsed {
+  width: 0;
+  min-width: 0;
+  border-right-color: transparent;
+}
+
+/* Desktop sidebar toggle button */
+.sidebar-toggle {
+  width: 28px; height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 15px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.sidebar-toggle:hover { background: var(--hover-bg); color: var(--text); }
+
+.sidebar-header {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.sidebar-header h1 { font-size: 15px; font-weight: 700; color: var(--color-accent); }
+.sidebar-header p  { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+
+.mode-section {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.section-label {
+  font-size: 10px; font-weight: 600;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text-dimmer); margin-bottom: 6px;
+}
+.mode-btn {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 7px 10px;
+  border-radius: 8px; border: none;
+  background: transparent; color: var(--text-muted);
+  font-size: 13px; cursor: pointer; text-align: left;
+  margin-bottom: 2px; transition: all 0.15s;
+}
+.mode-btn:hover  { background: var(--hover-bg); color: var(--text); }
+.mode-btn.active { background: color-mix(in oklch, var(--color-accent) 12%, transparent); color: var(--color-accent); }
+.mode-icon { font-size: 15px; }
+.tts-btn, .next-q-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: var(--hover-bg); border: 1px solid var(--border); border-radius: 6px;
+  cursor: pointer; font-size: 13px; color: var(--text-muted);
+  padding: 6px 12px; margin-top: 8px; min-height: 34px;
+  transition: background 0.15s, color 0.15s;
+  user-select: none; -webkit-user-select: none;
+}
+.next-q-btn { margin-left: 8px; }
+.tts-btn:hover { color: var(--text); }
+.tts-btn.tts-loading {
+  background: #64748b20; color: #94a3b8; border-color: #64748b40;
+  cursor: pointer; animation: tts-loading-pulse 1.2s ease-in-out infinite;
+}
+@keyframes tts-loading-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.55; } }
+.tts-btn.tts-loading:hover { color: #cbd5e1; }
+.tts-btn.tts-playing { background: color-mix(in oklch, var(--color-accent) 12%, transparent); color: var(--color-accent); border-color: color-mix(in oklch, var(--color-accent) 25%, transparent); }
+.tts-btn.tts-paused  { background: #f59e0b20; color: #f59e0b; border-color: #f59e0b40; }
+
+/* ── Main ── */
+.main {
+  flex: 1; display: flex; flex-direction: column;
+  overflow: hidden; min-width: 0; min-height: 0;
+}
+
+.chat-header {
+  padding: 13px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+  display: flex; align-items: center;
+  justify-content: space-between; gap: 12px;
+}
+.header-topic { font-size: 14px; font-weight: 600; color: var(--heading); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Закрытый select — фон/бордер от accent через color-mix; native arrow
+ * (appearance: auto) рисуется UA в соответствии с color-scheme:state.mode.
+ * Это же выправляет открытый dropdown — он следует palette автоматом. */
+#model-select {
+  font-size: 11px; font-weight: 500;
+  padding: 3px 10px; border-radius: 20px;
+  background: color-mix(in oklch, var(--color-accent) 12%, var(--color-surface));
+  color: var(--color-accent);
+  border: 1px solid color-mix(in oklch, var(--color-accent) 27%, transparent);
+  cursor: pointer; outline: none;
+  white-space: nowrap; flex-shrink: 0;
+}
+#model-select:hover { border-color: color-mix(in oklch, var(--color-accent) 53%, transparent); }
+#model-select:focus { border-color: var(--color-accent); }
+.mode-badge {
+  font-size: 11px; font-weight: 500;
+  padding: 3px 10px; border-radius: 20px; white-space: nowrap;
+}
+.badge-quiz       { background: #60a5fa20; color: #60a5fa; }
+
+/* ── Messages ── */
+.messages {
+  flex: 1; min-height: 0; overflow-y: auto; padding: 20px;
+  display: flex; flex-direction: column; gap: 16px;
+}
+.welcome {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  text-align: center; gap: 12px; padding: 40px;
+  color: var(--text-dim);
+}
+.welcome-arrow { font-size: 28px; color: var(--color-accent); animation: pulse 2s infinite; }
+.welcome h2    { font-size: 20px; color: var(--text-muted); font-weight: 500; }
+.welcome p     { font-size: 13px; max-width: 380px; line-height: 1.6; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
+
+.msg { display: flex; gap: 10px; max-width: 100%; }
+.msg.user { flex-direction: row-reverse; }
+
+.avatar {
+  width: 30px; height: 30px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; flex-shrink: 0; margin-top: 2px;
+}
+.avatar.ai   { background: color-mix(in oklch, var(--color-accent) 9%, transparent); }
+.avatar.user { background: var(--avatar-user-bg); }
+
+.bubble {
+  background: var(--bubble-ai);
+  border: 1px solid var(--bubble-ai-border);
+  border-radius: 12px; padding: 11px 15px;
+  max-width: calc(100% - 50px);
+  font-size: 14px; line-height: 1.7;
+}
+.msg.user .bubble {
+  background: var(--bubble-user);
+  border-color: var(--bubble-user-bdr);
+}
+
+/* Превью рассуждения (для моделей, отдающих <thought>...</thought>) */
+.thinking-preview {
+  font-style: italic;
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.55;
+  background: var(--hover-bg-soft);
+  border-left: 2px solid var(--border);
+  padding: 7px 11px;
+  border-radius: 4px;
+  max-height: 140px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  margin: 0;
+}
+
+/* Markdown */
+.bubble h1,.bubble h2,.bubble h3 {
+  font-size: 14px; font-weight: 600;
+  color: var(--heading); margin: 10px 0 5px;
+}
+.bubble h1:first-child,.bubble h2:first-child,.bubble h3:first-child { margin-top: 0; }
+.bubble p { margin: 5px 0; }
+.bubble p:first-child { margin-top: 0; }
+.bubble p:last-child  { margin-bottom: 0; }
+.bubble ul,.bubble ol { padding-left: 18px; margin: 5px 0; }
+.bubble li { margin: 3px 0; }
+.bubble strong { color: var(--heading); }
+.bubble em     { color: var(--em-color); }
+.bubble blockquote {
+  border-left: 3px solid var(--color-accent);
+  padding-left: 10px; margin: 6px 0; color: var(--text-muted);
+}
+
+/* Inline code */
+.bubble code {
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
+  padding: 1px 5px; border-radius: 4px;
+  font-family: 'JetBrains Mono','Fira Code',monospace;
+  font-size: 12px; color: var(--code-color);
+}
+
+/* ── Glossary tooltips ── */
+.gloss-term {
+  border-bottom: 1px dashed var(--text-muted);
+  cursor: help;
+}
+.gloss-term:hover {
+  border-bottom-color: var(--color-accent);
+  border-bottom-style: solid;
+  color: var(--color-accent);
+}
+
+.bubble pre {
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
+  border-radius: 8px; padding: 12px;
+  overflow-x: auto; margin: 0;
+}
+.bubble pre code {
+  background: none; border: none; padding: 0;
+  font-size: 12px; line-height: 1.6; color: var(--text);
+}
+
+/* Typing dots */
+.typing { display: flex; gap: 4px; align-items: center; padding: 2px 0; }
+.typing span {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--dot-color); animation: bounce 1.1s infinite;
+}
+.typing span:nth-child(2) { animation-delay: 0.18s; }
+.typing span:nth-child(3) { animation-delay: 0.36s; }
+@keyframes bounce {
+  0%,80%,100% { transform: translateY(0); opacity: 0.4; }
+  40%          { transform: translateY(-5px); opacity: 1; }
+}
+
+/* ── Quick actions ── */
+.quick-area { padding: 8px 20px 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.qbtn {
+  padding: 4px 12px; border-radius: 20px;
+  border: 1px solid var(--border);
+  background: transparent; color: var(--text-muted);
+  font-size: 12px; cursor: pointer; transition: all 0.15s; white-space: nowrap;
+}
+.qbtn:hover { border-color: var(--color-accent); color: var(--color-accent); background: color-mix(in oklch, var(--color-accent) 5%, transparent); }
+.qbtn.has-ctx { border-color: var(--color-accent); color: var(--color-accent); background: color-mix(in oklch, var(--color-accent) 12%, transparent); }
+.qbtn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* ── Input ── */
+.input-area {
+  padding: 10px 20px calc(16px + env(safe-area-inset-bottom));
+  display: flex; gap: 10px; align-items: flex-end;
+}
+.input-wrap {
+  flex: 1; background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px; display: flex;
+  align-items: flex-end; padding: 9px 13px;
+  transition: border-color 0.15s;
+}
+.input-wrap:focus-within { border-color: var(--color-accent); }
+textarea {
+  flex: 1; background: none; border: none; outline: none;
+  color: var(--text); font-size: 16px; line-height: 1.5;
+  resize: none; min-height: 20px; max-height: 120px; font-family: inherit;
+  touch-action: manipulation; /* Firefox: убирает tap-to-zoom на инпут */
+}
+textarea::placeholder { color: var(--text-dim); }
+
+.send-btn {
+  width: 38px; height: 38px; border-radius: 10px;
+  border: none; background: var(--color-accent); color: white;
+  font-size: 18px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; transition: background 0.15s;
+}
+.send-btn:hover    { background: #9061f9; }
+.send-btn:disabled { background: var(--send-disabled); cursor: not-allowed; }
+@keyframes mic-pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 2px; }
+
+/* ── Hamburger / overlay (только мобильные) ── */
+.hamburger {
+  display: none;
+  width: 36px; height: 36px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 18px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.overlay {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 998;
+}
+.overlay.show { display: block; }
+
+/* ── Mobile layout ── */
+@media (max-width: 768px) {
+  .sidebar-toggle { display: none; }
+  .hamburger { display: flex; }
+  .sidebar {
+    position: fixed;
+    left: 0; top: 0; bottom: 0;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    z-index: 999;
+    width: 280px;
+    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.4);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .sidebar.open { transform: translateX(0); }
+  .main { width: 100%; }
+  .chat-header { padding: 10px 14px; gap: 10px; }
+  .header-topic { font-size: 13px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .messages { padding: 14px; gap: 12px; }
+  .quick-area { padding: 6px 12px 0; }
+  .input-area { padding: 8px 12px calc(12px + env(safe-area-inset-bottom)); }
+  .qbtn { font-size: 11.5px; padding: 4px 10px; }
+  .bubble { font-size: 14px; padding: 10px 13px; }
+  .avatar { width: 28px; height: 28px; }
+}
+
+/* ── Touch-устройства: всегда показываем кнопку "Разобрать" ── */
+@media (hover: none) {
+  .code-explain-btn { opacity: 1; }
+  .gloss-term { /* убираем эффект hover, тултипы по тапу */
+    border-bottom-style: dotted;
+  }
+}
+
+/* ── Библиотека в боковой панели ────────────────────────────────── */
+
+.sidebar-sub { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+
+.library { flex: 1; overflow-y: auto; padding: 6px 0 16px; }
+
+.book { border-bottom: 1px solid var(--border); }
+
+.book-btn {
+  width: 100%; display: flex; align-items: center; gap: 8px;
+  padding: 9px 14px; background: none; border: none; cursor: pointer;
+  color: var(--text); font-size: 13px; text-align: left;
+}
+.book-btn:hover { background: var(--hover-bg-soft); }
+.book-btn.active { color: var(--color-accent); }
+.book-caret { font-size: 10px; color: var(--text-dim); width: 10px; }
+.book-title { flex: 1; font-weight: 600; line-height: 1.3; }
+.book-meta { font-size: 10.5px; color: var(--text-dim); }
+
+.chapters { padding-bottom: 6px; }
+
+.chapter-btn {
+  width: 100%; display: flex; align-items: center; gap: 8px;
+  padding: 6px 14px 6px 30px; background: none; border: none; cursor: pointer;
+  color: var(--text-muted); font-size: 12.5px; text-align: left;
+}
+.chapter-btn:hover { background: var(--hover-bg-soft); color: var(--text); }
+.chapter-btn.active { background: var(--hover-bg); color: var(--color-accent); }
+.chapter-title { flex: 1; line-height: 1.35; }
+.chapter-meta { font-size: 10px; color: var(--text-dimmer); flex-shrink: 0; }
+
+/* Точка «прочитано»: пустая — глава не открывалась до конца. */
+.chapter-dot {
+  width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+  border: 1px solid var(--text-dimmer);
+}
+.chapter-dot.done { background: var(--color-success); border-color: var(--color-success); }
+
+.sidebar-footer { border-top: 1px solid var(--border); padding: 10px 14px; }
+
+.upload-btn {
+  width: 100%; padding: 7px 10px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--bg-panel);
+  color: var(--text-muted); font-size: 12px;
+}
+.upload-btn:hover:not(:disabled) { background: var(--hover-bg); color: var(--text); }
+.upload-btn:disabled { opacity: 0.45; cursor: default; }
+.upload-status { margin-top: 6px; }
+
+.muted { font-size: 11.5px; color: var(--text-dim); padding: 4px 14px; line-height: 1.5; }
+
+/* ── Режимы: бейдж в шапке ──────────────────────────────────────── */
+
+.badge-read    { background: color-mix(in oklch, var(--color-accent) 12%, transparent); color: var(--color-accent); }
+.badge-discuss { background: #60a5fa20; color: #60a5fa; }
+.badge-quiz    { background: #34d39920; color: #34d399; }
+.badge-context { background: #f59e0b20; color: #f59e0b; }
+.badge-search  { background: #a78bfa20; color: #a78bfa; }
+
+/* ── Чтение главы ───────────────────────────────────────────────── */
+
+.reader { padding: 24px 0 64px; }
+
+.reader-head { max-width: 680px; margin: 0 auto 22px; padding: 0 20px; }
+.reader-head h2 { font-size: 22px; font-weight: 700; color: var(--heading); line-height: 1.25; }
+.reader-sub { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+.reader-meta {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);
+  font-size: 11.5px; color: var(--text-dim);
+}
+.reader-tts {
+  margin-left: auto; padding: 4px 10px; border-radius: 5px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--bg-panel);
+  color: var(--text-muted); font-size: 11.5px;
+}
+.reader-tts:hover { background: var(--hover-bg); color: var(--text); }
+
+/* Колонка уже, чем окно: длинная строка читается тем хуже, чем она длиннее,
+   и на широком мониторе текст без ограничения расползается на всю ширину. */
+.para {
+  max-width: 680px; margin: 0 auto 17px; padding: 0 20px;
+  font-size: 16px; line-height: 1.72; color: var(--text);
+  text-align: justify; hyphens: auto;
+}
+
+/* Подписи, врезки и записи перечня источников: в PDF рядом с ними стоит
+   иллюстрация или своя вёрстка, которой здесь нет, поэтому второстепенность
+   показывают кегль и полоса слева. Текстовой метки нет намеренно — одной
+   разметкой набраны и подписи к фото, и библиография. */
+.para.caption {
+  font-size: 13.5px; line-height: 1.6; color: var(--text-muted);
+  border-left: 2px solid var(--border); padding-left: 16px;
+  text-align: left; hyphens: manual;
+}
+.caption-mark {
+  font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text-dimmer); margin-right: 8px;
+}
+
+.reader-notes {
+  max-width: 680px; margin: 36px auto 0; padding: 18px 20px 0;
+  border-top: 1px solid var(--border);
+}
+.reader-notes textarea {
+  width: 100%; margin: 6px 0 8px; padding: 8px 10px; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--input-bg);
+  color: var(--text); font-family: inherit; font-size: 13px; resize: vertical;
+}
+.reader-notes .upload-btn { width: auto; padding: 6px 14px; }
+.reader-notes .muted { padding: 8px 0 0; }
+.note {
+  padding: 8px 10px; margin-bottom: 6px; border-radius: 6px;
+  background: var(--bg-panel); border: 1px solid var(--border);
+  font-size: 13px; line-height: 1.55; color: var(--text-muted);
+}
+
+/* ── Источники под ответом поиска ───────────────────────────────── */
+
+.sources { margin: 0 0 10px 56px; max-width: 760px; }
+
+.sources-toggle {
+  background: none; border: none; cursor: pointer; padding: 2px 0;
+  color: var(--text-dim); font-size: 11.5px;
+}
+.sources-toggle:hover { color: var(--text); }
+
+.source {
+  margin: 6px 0; padding: 8px 10px; border-radius: 6px;
+  background: var(--bg-panel); border: 1px solid var(--border);
+}
+.source-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.source-num { font-size: 11px; font-weight: 700; color: var(--color-accent); }
+.source-link {
+  background: none; border: none; cursor: pointer; padding: 0;
+  color: var(--text-muted); font-size: 11.5px; text-align: left;
+  text-decoration: underline dotted; text-underline-offset: 2px;
+}
+.source-link:hover { color: var(--color-accent); }
+.source-rank {
+  margin-left: auto; font-size: 10px; color: var(--text-dimmer);
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+.source-text {
+  margin-top: 5px; font-size: 12.5px; line-height: 1.55; color: var(--text-muted);
+}
+
+@media (max-width: 768px) {
+  .sources { margin-left: 0; }
+  .para, .reader-head, .reader-notes { padding-left: 16px; padding-right: 16px; }
+  .para { font-size: 15.5px; text-align: left; }
+}

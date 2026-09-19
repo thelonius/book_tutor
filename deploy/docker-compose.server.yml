@@ -1,0 +1,45 @@
+# Тот же общий VDS, что и у mlops-tutor: TLS терминирует чужой Caddy из
+# соседнего стека, своего тут завести нельзя — хостовый порт 80 занят.
+#
+# Запуск на сервере:
+#   cd /root/book-tutor/deploy && docker compose -f docker-compose.server.yml up -d --build
+services:
+  # Имя сервиса намеренно не `app`: compose публикует его DNS-алиасом в
+  # каждой подключённой сети, а общий Caddy сидит сразу в нескольких.
+  # На mlops-tutor второй `app` однажды перехватил чужой трафик.
+  book_app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: book-tutor:latest
+    container_name: book_tutor_app
+    restart: unless-stopped
+    env_file: ../.env
+    environment:
+      - LIBRARY_DB_PATH=/app/data/library.db
+      - UPLOAD_DIR=/app/data/uploads
+      - FASTEMBED_CACHE_PATH=/opt/fastembed
+    working_dir: /app
+    volumes:
+      - ../app.py:/app/app.py:ro
+      - ../llm.py:/app/llm.py:ro
+      - ../prompts.py:/app/prompts.py:ro
+      - ../store.py:/app/store.py:ro
+      - ../retrieval.py:/app/retrieval.py:ro
+      - ../ru_stem.py:/app/ru_stem.py:ro
+      - ../ingest.py:/app/ingest.py:ro
+      - ../embeddings.py:/app/embeddings.py:ro
+      - ../narrate.py:/app/narrate.py:ro
+      - ../static:/app/static:ro
+      # Данные на запись: сюда же ложатся загруженные PDF.
+      - ../data:/app/data
+    expose:
+      - "8080"
+    networks:
+      - book_edge
+
+networks:
+  # Создаётся вне compose (docker network create book_edge) и разделяется
+  # с прокси. Объявлена внешней, чтобы пережить пересоздание контейнера.
+  book_edge:
+    external: true
