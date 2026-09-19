@@ -57,6 +57,8 @@ class Hit:
     score: float
     lexical_rank: Optional[int] = None
     vector_rank: Optional[int] = None
+    # Иллюстрации, к которым этот абзац служит подписью.
+    image_ids: tuple[int, ...] = ()
 
     @property
     def citation(self) -> str:
@@ -76,6 +78,7 @@ class Hit:
             'score': round(self.score, 5),
             'lexical_rank': self.lexical_rank,
             'vector_rank': self.vector_rank,
+            'image_ids': list(self.image_ids),
             'citation': self.citation,
         }
 
@@ -209,7 +212,8 @@ def search(db: sqlite3.Connection, index: Optional[VectorIndex], query: str,
             chapter_id=m['chapter_id'], chapter_idx=m['chapter_idx'],
             chapter_title=m['chapter_title'],
             score=scores[pid], lexical_rank=lrank.get(pid),
-            vector_rank=vrank.get(pid)))
+            vector_rank=vrank.get(pid),
+            image_ids=tuple(m.get('image_ids') or ())))
         if len(hits) >= limit:
             break
     return hits

@@ -69,3 +69,60 @@ def test_notes_roundtrip(db):
     assert len(store.notes_of(db, 'test', cid)) == 1
     assert len(store.notes_of(db, 'test')) == 1
     assert store.notes_of(db, 'test', 999) == []
+
+
+def test_images_link_to_captions_and_mark_them(db, tmp_path):
+    """Геометрия главнее отступов: блок под картинкой становится подписью,
+    даже если правило отступов сочло его основным текстом."""
+    para = db.execute(
+        "SELECT id, text FROM paragraphs WHERE kind = 'body' ORDER BY id").fetchone()
+    f = tmp_path / 'img-001-000.jpg'
+    f.write_bytes(b'x')
+
+    linked = store.add_images(db, 'test', [
+        {'page': 1, 'idx': 0, 'path': f, 'width': 800, 'height': 600,
+         'caption_line': para['text'][:40]},
+    ])
+    assert linked == 1
+    row = db.execute('SELECT * FROM images').fetchone()
+    assert row['paragraph_id'] == para['id']
+    assert db.execute('SELECT kind FROM paragraphs WHERE id = ?',
+                      (para['id'],)).fetchone()[0] == 'caption'
+
+
+def test_image_without_caption_still_lands_in_its_chapter(db, tmp_path):
+    """Потерять документ хуже, чем показать его не на своём месте."""
+    f = tmp_path / 'img-002-000.jpg'
+    f.write_bytes(b'x')
+    assert store.add_images(db, 'test', [
+        {'page': 2, 'idx': 0, 'path': f, 'width': 10, 'height': 10,
+         'caption_line': None}]) == 0
+    row = db.execute('SELECT * FROM images').fetchone()
+    assert row['paragraph_id'] is None
+    assert row['chapter_id'] == store.chapters_of(db, 'test')[1]['id']
+
+
+def test_caption_line_matches_across_punctuation_differences(db, tmp_path):
+    """pdfplumber и pdftotext расходятся в пробелах и кавычках на одном и
+    том же тексте, поэтому сверка идёт по буквам и цифрам."""
+    para = db.execute("SELECT id, text FROM paragraphs "
+                      "WHERE kind = 'caption'").fetchone()
+    noisy = para['text'][:40].replace(' ', '  ').replace('«', '"')
+    f = tmp_path / 'img-001-001.jpg'
+    f.write_bytes(b'x')
+    assert store.add_images(db, 'test', [
+        {'page': 1, 'idx': 1, 'path': f, 'width': 10, 'height': 10,
+         'caption_line': noisy}]) == 1
+
+
+def test_delete_book_removes_image_files(db, tmp_path):
+    f = tmp_path / 'img-001-000.jpg'
+    f.write_bytes(b'x')
+    web = f.with_suffix('.web.jpg')
+    web.write_bytes(b'x')
+    store.add_images(db, 'test', [
+        {'page': 1, 'idx': 0, 'path': f, 'width': 10, 'height': 10,
+         'caption_line': None}])
+    store.delete_book(db, 'test')
+    assert not f.exists() and not web.exists()
+    assert db.execute('SELECT COUNT(*) FROM images').fetchone()[0] == 0

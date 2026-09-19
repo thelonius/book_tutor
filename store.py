@@ -11,6 +11,7 @@
 """
 from __future__ import annotations
 
+import re
 import sqlite3
 import threading
 from pathlib import Path
@@ -70,6 +71,22 @@ CREATE TABLE IF NOT EXISTS vectors (
     vec          BLOB NOT NULL
 );
 
+-- Иллюстрации: сами файлы лежат на диске (книга даёт 20+ МБ растров),
+-- в базе только путь и привязка к подписи. paragraph_id может быть NULL,
+-- если подпись не нашлась: картинка тогда показывается по номеру страницы.
+CREATE TABLE IF NOT EXISTS images (
+    id           INTEGER PRIMARY KEY,
+    book_id      TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+    chapter_id   INTEGER REFERENCES chapters(id) ON DELETE CASCADE,
+    paragraph_id INTEGER REFERENCES paragraphs(id) ON DELETE CASCADE,
+    page         INTEGER NOT NULL,
+    idx          INTEGER NOT NULL,
+    path         TEXT NOT NULL,
+    width        INTEGER,
+    height       INTEGER
+);
+CREATE INDEX IF NOT EXISTS images_chapter ON images(chapter_id, page, idx);
+
 -- Заметки пользователя живут рядом с текстом и участвуют в поиске наравне
 -- с ним: спрашивая «что я думал про Гороховую», человек ждёт и свою выписку.
 CREATE TABLE IF NOT EXISTS notes (
@@ -124,7 +141,13 @@ class Pool:
 # ------------------------------------------------------------------ запись
 
 def delete_book(db: sqlite3.Connection, book_id: str) -> None:
-    """Сносит книгу целиком. Нужен для переиндексации без дублей."""
+    """Сносит книгу целиком, вместе с файлами иллюстраций."""
+    for row in db.execute("SELECT path FROM images WHERE book_id = ?", (book_id,)):
+        path = Path(row["path"])
+        path.unlink(missing_ok=True)
+        # Уменьшенная копия лежит рядом под .web.jpg.
+        path.with_suffix(".web.jpg").unlink(missing_ok=True)
+
     ids = [r[0] for r in db.execute(
         "SELECT id FROM paragraphs WHERE book_id = ?", (book_id,))]
     if ids:
@@ -165,6 +188,89 @@ def add_book(db: sqlite3.Connection, book: dict, chapters: list[dict]) -> None:
                 "INSERT INTO paragraphs_fts(rowid, text, stem) VALUES(?,?,?)",
                 (pid, para["text"], ru_stem.stem_text(para["text"])))
     db.commit()
+
+
+def _match_key(text: str) -> str:
+    """Только буквы и цифры в нижнем регистре.
+
+    Подпись приходит от pdfplumber, абзац — от pdftotext, и на одном и том
+    же тексте они расходятся в пробелах, дефисах и кавычках.
+    """
+    return re.sub(r'[^\w]', '', text.lower())
+
+
+# Короче этого сравнивать нельзя: «Он же.» совпадёт с чем угодно.
+MIN_MATCH = 12
+
+
+def add_images(db: sqlite3.Connection, book_id: str, items: list[dict]) -> int:
+    """
+    Записывает иллюстрации и привязывает их к подписям.
+
+    Привязка идёт по тексту первой строки подписи, которую вернула
+    геометрия. Найденный абзац заодно помечается подписью: блок, стоящий
+    вплотную под картинкой, ею является независимо от отступов вёрстки, а
+    отступы ошибались — так находятся подписи под схемами на альбомных
+    страницах.
+    """
+    rows = db.execute(
+        "SELECT id, chapter_id, page, text FROM paragraphs WHERE book_id = ?",
+        (book_id,)).fetchall()
+    by_page: dict[int, list[tuple[str, sqlite3.Row]]] = {}
+    for r in rows:
+        by_page.setdefault(r["page"], []).append((_match_key(r["text"]), r))
+
+    linked = 0
+    for item in items:
+        para = None
+        key = _match_key(item.get("caption_line") or "")
+        if len(key) >= MIN_MATCH:
+            # Сверяем префиксом, а не ключом фиксированной длины: от
+            # pdfplumber приходит первая строка подписи, а в абзаце лежит
+            # вся подпись целиком, и длина у них разная.
+            #
+            # Подпись под картинкой внизу полосы начинается на следующей
+            # странице, поэтому смотрим и туда.
+            for page in (item["page"], item["page"] + 1):
+                para = next((r for k, r in by_page.get(page, [])
+                             if k.startswith(key)), None)
+                if para is not None:
+                    break
+        if para is not None:
+            linked += 1
+            db.execute("UPDATE paragraphs SET kind = 'caption' WHERE id = ?",
+                       (para["id"],))
+        else:
+            # Без подписи вешаем картинку на главу, в которую попала страница.
+            para = db.execute(
+                "SELECT NULL AS id, id AS chapter_id FROM chapters "
+                "WHERE book_id = ? AND page_from <= ? AND page_to >= ?",
+                (book_id, item["page"], item["page"])).fetchone()
+
+        db.execute(
+            "INSERT INTO images(book_id, chapter_id, paragraph_id, page, idx, "
+            "path, width, height) VALUES(?,?,?,?,?,?,?,?)",
+            (book_id, para["chapter_id"] if para else None,
+             para["id"] if para else None,
+             item["page"], item["idx"], str(item["path"]),
+             item.get("width"), item.get("height")))
+
+    # Переиндексировать FTS не надо: kind в индекс не входит, там только
+    # текст и его основы, а текст не менялся.
+    db.commit()
+    return linked
+
+
+def images_of_chapter(db: sqlite3.Connection, chapter_id: int) -> list[dict]:
+    rows = db.execute(
+        "SELECT id, paragraph_id, page, idx, width, height FROM images "
+        "WHERE chapter_id = ? ORDER BY page, idx", (chapter_id,)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def image_path(db: sqlite3.Connection, image_id: int) -> Optional[str]:
+    row = db.execute("SELECT path FROM images WHERE id = ?", (image_id,)).fetchone()
+    return row["path"] if row else None
 
 
 def index_vectors(db: sqlite3.Connection, embed, book_id: Optional[str] = None,
@@ -263,7 +369,15 @@ def paragraphs_by_id(db: sqlite3.Connection, ids: Iterable[int]) -> dict[int, di
         JOIN books b ON b.id = p.book_id
         WHERE p.id IN ({marks})
     """, ids).fetchall()
-    return {r["id"]: dict(r) for r in rows}
+    out = {r["id"]: dict(r) for r in rows}
+
+    # Поиск часто попадает именно в подпись — значит нашёлся документ, и
+    # показать его вместе с цитатой полезнее, чем один текст подписи.
+    for r in db.execute(
+            f"SELECT paragraph_id, id FROM images "
+            f"WHERE paragraph_id IN ({marks}) ORDER BY page, idx", ids):
+        out[r["paragraph_id"]].setdefault("image_ids", []).append(r["id"])
+    return out
 
 
 def load_vectors(db: sqlite3.Connection,

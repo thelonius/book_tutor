@@ -151,6 +151,10 @@ def main() -> None:
     ap.add_argument('--db', default='data/library.db')
     ap.add_argument('--no-vectors', action='store_true',
                     help='только текст и FTS, эмбеддинги посчитать позже')
+    ap.add_argument('--no-images', action='store_true',
+                    help='не вынимать иллюстрации (книга на 20+ МБ растров)')
+    ap.add_argument('--images-dir', default='data/images',
+                    help='куда складывать иллюстрации')
     ap.add_argument('--dry-run', action='store_true')
     args = ap.parse_args()
 
@@ -176,6 +180,12 @@ def main() -> None:
     db = store.connect(args.db)
     store.add_book(db, book, chapters)
     print(f'  записано в {args.db}')
+
+    if not args.no_images:
+        import images
+        items = images.link(args.pdf, Path(args.images_dir) / book['id'])
+        linked = store.add_images(db, book['id'], items)
+        print(f'  иллюстраций {len(items)}, привязано к подписям {linked}')
 
     if not args.no_vectors:
         import embeddings

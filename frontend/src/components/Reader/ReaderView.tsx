@@ -3,7 +3,7 @@ import { useStore } from '../../state/store';
 import { useSharedTts } from '../TtsProvider';
 import { useGlossary } from '../Glossary/GlossaryProvider';
 import { createNote } from '../../api';
-import type { Paragraph } from '../../types';
+import type { Illustration, Paragraph } from '../../types';
 
 /**
  * Подсветка терминов глоссария в обычном тексте.
@@ -34,6 +34,37 @@ function withTerms(text: string, regex: RegExp | null,
   if (last === 0) return text;
   if (last < text.length) out.push(text.slice(last));
   return out;
+}
+
+/**
+ * Иллюстрации к одной подписи.
+ *
+ * Их бывает две: в книге они стоят рядом, и подпись описывает обе разом
+ * («слева портрет молодых лет; справа он же с братом жены»). Поэтому в
+ * ряд, а не столбиком — иначе «слева» и «справа» перестают значить что-то.
+ */
+function Plates({ items }: { items: Illustration[] }) {
+  if (!items.length) return null;
+  return (
+    <div className={`plates${items.length > 1 ? ' pair' : ''}`}>
+      {items.map((im) => (
+        <a
+          key={im.id}
+          className="plate"
+          href={`/api/image/${im.id}?full=1`}
+          target="_blank"
+          rel="noreferrer"
+          title="Открыть оригинал"
+          // Пропорции заранее: без них текст прыгает, пока грузятся
+          // растры, а их в главе бывает по семь.
+          style={{ flexGrow: im.width / im.height }}
+        >
+          <img src={`/api/image/${im.id}`} width={im.width} height={im.height}
+               loading="lazy" alt="" />
+        </a>
+      ))}
+    </div>
+  );
 }
 
 export function ReaderView() {
@@ -70,6 +101,19 @@ export function ReaderView() {
     () => (glossary ? { regex: glossary.regex, lookup: glossary.lookup } : null),
     [glossary],
   );
+
+  // Картинка идёт перед своей подписью, как в книге. Те, чью подпись
+  // геометрия не нашла, собираются в конце главы: потерять документ хуже,
+  // чем показать его не на своём месте.
+  const { byParagraph, orphans } = useMemo(() => {
+    const map = new Map<number, Illustration[]>();
+    const rest: Illustration[] = [];
+    for (const im of chapter?.images ?? []) {
+      if (im.paragraph_id == null) rest.push(im);
+      else map.set(im.paragraph_id, [...(map.get(im.paragraph_id) ?? []), im]);
+    }
+    return { byParagraph: map, orphans: rest };
+  }, [chapter]);
 
   if (chapterId == null) {
     return (
@@ -124,10 +168,14 @@ export function ReaderView() {
       </div>
 
       {chapter.paragraphs.map((p: Paragraph) => (
-        <p key={p.id} className={p.kind === 'caption' ? 'para caption' : 'para'}>
-          {withTerms(p.text, terms?.regex ?? null, terms?.lookup ?? null)}
-        </p>
+        <div key={p.id}>
+          <Plates items={byParagraph.get(p.id) ?? []} />
+          <p className={p.kind === 'caption' ? 'para caption' : 'para'}>
+            {withTerms(p.text, terms?.regex ?? null, terms?.lookup ?? null)}
+          </p>
+        </div>
       ))}
+      <Plates items={orphans} />
 
       <div className="reader-notes">
         <div className="section-label">Заметка к главе</div>

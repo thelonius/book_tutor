@@ -32,11 +32,22 @@ export interface ChapterRef {
   n_chars: number;
 }
 
+export interface Illustration {
+  id: number;
+  /** Подпись, под которой стоит картинка. null — подпись не нашлась. */
+  paragraph_id: number | null;
+  page: number;
+  idx: number;
+  width: number;
+  height: number;
+}
+
 export interface Chapter extends ChapterRef {
   book_id: string;
   book_title: string;
   paragraphs: Paragraph[];
   notes: Note[];
+  images: Illustration[];
 }
 
 export interface Book {
@@ -74,6 +85,8 @@ export interface Hit {
   // половина поиска абзац не нашла; полезно видеть, кто сработал.
   lexical_rank: number | null;
   vector_rank: number | null;
+  /** Иллюстрации, к которым найденный абзац служит подписью. */
+  image_ids: number[];
   citation: string;
 }
 

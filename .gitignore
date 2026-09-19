@@ -6,6 +6,8 @@ data/*.db
 data/*.db-shm
 data/*.db-wal
 data/uploads/
+# Растры из PDF: 20+ МБ на книгу, воссоздаются ingest.py
+data/images/
 audio/
 frontend/node_modules/
 static/dist/

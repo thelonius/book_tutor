@@ -561,6 +561,14 @@ textarea::placeholder { color: var(--text-dim); }
   margin-left: auto; font-size: 10px; color: var(--text-dimmer);
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
 }
+.source-plates { display: flex; gap: 6px; margin-top: 6px; }
+.source-plates a { display: block; flex: 0 1 auto; min-width: 0; line-height: 0; }
+.source-plates img {
+  max-height: 120px; max-width: 100%; width: auto; display: block;
+  border: 1px solid var(--border); border-radius: 3px;
+}
+.source-plates a:hover img { border-color: var(--color-accent); }
+
 .source-text {
   margin-top: 5px; font-size: 12.5px; line-height: 1.55; color: var(--text-muted);
 }
@@ -569,4 +577,35 @@ textarea::placeholder { color: var(--text-dim); }
   .sources { margin-left: 0; }
   .para, .reader-head, .reader-notes { padding-left: 16px; padding-right: 16px; }
   .para { font-size: 15.5px; text-align: left; }
+}
+
+/* ── Иллюстрации ────────────────────────────────────────────────── */
+
+.plates {
+  max-width: 680px; margin: 0 auto 10px; padding: 0 20px;
+  display: flex; gap: 10px;
+}
+/* Пара под одной подписью стоит в ряд: она и в книге так стоит, и подпись
+   говорит «слева… справа…». Ширины по пропорциям через flex-grow, чтобы
+   у обеих совпала высота. */
+.plates.pair .plate { min-width: 0; }
+
+.plate {
+  display: block; flex: 1 1 0; min-width: 0;
+  border: 1px solid var(--border); border-radius: 4px; overflow: hidden;
+  background: var(--bg-panel); line-height: 0;
+}
+.plate:hover { border-color: var(--color-accent); }
+.plate img { width: 100%; height: auto; display: block; }
+
+/* Светлый скан на тёмном фоне слепит; приглушаем, пока не наведёшь. */
+@media (prefers-color-scheme: dark) {
+  .plate img { filter: brightness(0.88); transition: filter 0.15s; }
+  .plate:hover img { filter: none; }
+}
+
+@media (max-width: 768px) {
+  .plates { padding-left: 16px; padding-right: 16px; }
+  /* На телефоне пара в ряд превращается в две марки; лучше столбиком. */
+  .plates.pair { flex-direction: column; }
 }

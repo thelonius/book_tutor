@@ -47,6 +47,16 @@ export function Sources({ hits }: { hits: Hit[] }) {
                 {h.vector_rank ? `V${h.vector_rank}` : 'V—'}
               </span>
             </div>
+            {h.image_ids?.length > 0 && (
+              <div className="source-plates">
+                {h.image_ids.map((id) => (
+                  <a key={id} href={`/api/image/${id}?full=1`} target="_blank"
+                     rel="noreferrer" title="Открыть оригинал">
+                    <img src={`/api/image/${id}`} loading="lazy" alt="" />
+                  </a>
+                ))}
+              </div>
+            )}
             <div className="source-text">{h.text}</div>
           </div>
         ))}

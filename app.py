@@ -21,6 +21,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from flask import Flask, Response, jsonify, request, send_from_directory, stream_with_context
 
+import images
 import llm
 import narrate
 import prompts
@@ -33,6 +34,7 @@ llm.init()
 
 DB_PATH = os.getenv("LIBRARY_DB_PATH", "data/library.db")
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "data/uploads"))
+IMAGES_DIR = Path(os.getenv("IMAGES_DIR", "data/images"))
 STATIC_DIR = Path(__file__).parent / "static" / "dist"
 
 # Vite собирается с base='/static/dist/', и ассеты запрашиваются именно по
@@ -99,7 +101,33 @@ def get_chapter(chapter_id):
     if not ch:
         return jsonify({"error": "нет такой главы"}), 404
     ch["notes"] = store.notes_of(get_db(), ch["book_id"], chapter_id)
+    ch["images"] = store.images_of_chapter(get_db(), chapter_id)
     return jsonify(ch)
+
+
+@app.route("/api/image/<int:image_id>")
+def get_image(image_id):
+    """
+    Иллюстрация. По умолчанию уменьшённая копия, с ?full=1 — оригинал.
+
+    Оригиналы бывают 2467 пикселей по длинной стороне и весят по 600 КБ;
+    для чтения с экрана это впустую, а для разглядывания подписи писаря
+    в купчей — наоборот, единственное, что нужно. Копия делается при
+    первом обращении и остаётся на диске рядом с оригиналом.
+    """
+    raw = store.image_path(get_db(), image_id)
+    if not raw or not Path(raw).is_file():
+        return jsonify({"error": "нет такой иллюстрации"}), 404
+    path = Path(raw)
+    if not request.args.get("full"):
+        try:
+            path = images.make_web_copy(path)
+        except Exception:                               # noqa: BLE001
+            # Битый или экзотический растр — отдаём оригинал, это лучше,
+            # чем дырка на месте документа.
+            path = Path(raw)
+    return send_from_directory(path.parent, path.name,
+                               max_age=60 * 60 * 24 * 30)
 
 
 @app.route("/api/notes", methods=["POST"])
@@ -306,13 +334,24 @@ def upload_book():
         return jsonify({"error": "в PDF нет текстового слоя — нужен OCR"}), 400
 
     store.add_book(get_db(), book, chapters)
+
+    # Иллюстрации: без них книга документов наполовину пропадает, а подписи
+    # вроде «слева портрет, справа письмо» повисают в воздухе.
+    n_images = 0
+    try:
+        items = images.link(dest, IMAGES_DIR / book["id"])
+        n_images = store.add_images(get_db(), book["id"], items)
+    except Exception as e:                              # noqa: BLE001
+        # Книга без картинок полезнее, чем отказ на загрузке целиком.
+        app.logger.warning("иллюстрации не вынулись: %s", e)
+
     import embeddings
     n = store.index_vectors(get_db(), embeddings.embed, book_id=book["id"])
     index.reload()
 
     return jsonify({"id": book["id"], "title": book["title"],
                     "chapters": len(chapters), "chars": body_chars,
-                    "vectors": n})
+                    "images": n_images, "vectors": n})
 
 
 @app.route("/api/books/<book_id>", methods=["DELETE"])
